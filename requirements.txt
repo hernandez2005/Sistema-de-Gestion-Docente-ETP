@@ -1,0 +1,6 @@
+streamlit>=1.39.0
+google-generativeai
+openai
+python-docx
+PyPDF2
+tenacity
