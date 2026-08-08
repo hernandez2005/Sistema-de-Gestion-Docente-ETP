@@ -1,3 +1,17 @@
+# Entornos virtuales
+.venv/
+env/
+venv/
+
+# Archivos de caché de Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos del sistema operativo
 .DS_Store
+Thumbs.db
+
+# Credenciales locales (¡Muy importante por seguridad!)
 .env

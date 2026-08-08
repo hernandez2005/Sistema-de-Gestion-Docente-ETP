@@ -159,7 +159,6 @@ def extraer_script(texto_ia):
         truncado = True
         codigo = _balancear_etiqueta(codigo, 'script')
     elif codigo:
-        # El modelo devolvió JS crudo sin las etiquetas <script> — las agregamos.
         codigo = f"<script>\n{codigo}\n</script>"
     else:
         codigo = "<script>console.error('La IA devolvió una respuesta vacía en la fase de lógica.');</script>"
@@ -169,12 +168,20 @@ def extraer_script(texto_ia):
 
 def insertar_script(codigo_html, script_bloque):
     """Inserta el bloque de lógica justo antes de </body>, eliminando primero
-    cualquier <script> preexistente en la estructura (por seguridad)."""
+    cualquier <script> preexistente en la estructura (por seguridad).
+
+    IMPORTANTE: el reemplazo se pasa como función (lambda), no como string.
+    Si se pasa como string, re.sub intenta interpretar backslashes tipo
+    \\1, \\g<...> dentro del reemplazo — y el JavaScript generado por la IA
+    casi siempre contiene expresiones regulares propias (\\s, \\d, \\w, etc.)
+    que Python confunde con referencias de grupo inválidas, provocando
+    'bad escape \\s'. Una función como reemplazo inserta el texto tal cual,
+    sin ningún procesamiento de escapes."""
     sin_scripts = re.sub(r'<script[^>]*>.*?</script>', '', codigo_html, flags=re.DOTALL | re.IGNORECASE)
     if re.search(r'</body>', sin_scripts, flags=re.IGNORECASE):
-        return re.sub(r'</body>', script_bloque + '\n</body>', sin_scripts, count=1, flags=re.IGNORECASE)
+        return re.sub(r'</body>', lambda m: script_bloque + '\n</body>', sin_scripts, count=1, flags=re.IGNORECASE)
     elif re.search(r'</html>', sin_scripts, flags=re.IGNORECASE):
-        return re.sub(r'</html>', script_bloque + '\n</html>', sin_scripts, count=1, flags=re.IGNORECASE)
+        return re.sub(r'</html>', lambda m: script_bloque + '\n</html>', sin_scripts, count=1, flags=re.IGNORECASE)
     return sin_scripts + script_bloque
 
 
@@ -274,7 +281,7 @@ SISTEMA DE DISEÑO A APLICAR (tema visual: "{tema_visual}"):
 
 REGLAS INQUEBRANTABLES:
 1. NO uses la etiqueta <script> ni JavaScript de ningún tipo en esta fase. Solo HTML + CSS.
-2. CERO DEPENDENCIAS EXTERNAS: prohibido Tailwind, Bootstrap, Google Fonts o cualquier CDN. Si necesitas iconos, dibújalos como SVG inline.
+2. Cero DEPENDENCIAS EXTERNAS: prohibido Tailwind, Bootstrap, Google Fonts o cualquier CDN. Si necesitas iconos, dibújalos como SVG inline.
 3. NO uses <form>, NO botones type="submit", NO alert()/confirm()/prompt().
 4. Cada input, select, botón, y cada contenedor donde luego se inyectarán resultados o errores DEBE tener un atributo id único, descriptivo, en minúsculas con guiones. Ejemplos: id="input-ip", id="btn-calcular", id="resultado", id="error", id="btn-reiniciar".
 5. Cada botón que dispare una acción debe incluir el atributo onclick="" (vacío, se completará en la fase 2). Ejemplo: <button id="btn-calcular" onclick="">Calcular</button>.
@@ -351,27 +358,24 @@ if "codigo_actual" not in st.session_state:
 if "tema_actual" not in st.session_state:
     st.session_state.tema_actual = None
 if "historial" not in st.session_state:
-    st.session_state.historial = []  # lista de dicts: {tema, codigo, hora}
+    st.session_state.historial = []
 
 # =========================================================================
-# PANEL LATERAL
+# CONFIGURACIÓN CENTRALIZADA (desde main.py)
+# =========================================================================
+api_key_usuario = st.session_state.get("api_key_global", "")
+proveedor_ia = st.session_state.get("proveedor_ia_global", "Google Gemini")
+modelo_seleccionado = st.session_state.get("modelo_global", "gemini-2.5-flash")
+
+# =========================================================================
+# PANEL LATERAL (contenido específico de esta página)
 # =========================================================================
 with st.sidebar:
-    st.title("⚡ Núcleo de Procesamiento")
-    proveedor_ia = st.selectbox("Motor Analítico:", ["Google Gemini", "OpenAI (ChatGPT)"], key="prov_sim")
-
-    if proveedor_ia == "Google Gemini":
-        modelo_seleccionado = st.selectbox("Versión de Red Neuronal:", ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"], key="mod_sim")
+    st.markdown("##### ⚡ Fábrica de Simuladores")
+    if not api_key_usuario:
+        st.error("🔒 Configura tu API Key en la página de Inicio")
     else:
-        modelo_seleccionado = st.selectbox("Versión de Red Neuronal:", ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"], key="mod_sim2")
-
-    api_key_usuario = st.text_input(
-        "Clave de Autenticación (API Key):",
-        type="password",
-        value=st.session_state.get("api_key_global", ""),
-        key="api_sim_sinc"
-    )
-    st.session_state.api_key_global = api_key_usuario
+        st.success(f"✅ {proveedor_ia} · {modelo_seleccionado}")
 
     st.markdown("---")
     st.subheader("🎨 Presentación")
@@ -439,7 +443,7 @@ with st.form("form_simulador", clear_on_submit=False):
 # =========================================================================
 if submit_button:
     if not api_key_usuario:
-        st.error("🔒 Debes ingresar tu API Key en la barra lateral.")
+        st.error("🔒 Debes ingresar tu API Key en la página de Inicio (barra lateral).")
     elif not modulo or not tema or not descripcion:
         st.warning("📝 Completa la asignatura, el tema y la descripción exacta.")
     elif len(descripcion.strip()) < 25:
@@ -537,7 +541,7 @@ if st.session_state.codigo_actual:
 
         if submit_ajuste:
             if not api_key_usuario:
-                st.error("🔒 Debes ingresar tu API Key en la barra lateral.")
+                st.error("🔒 Debes ingresar tu API Key en la página de Inicio (barra lateral).")
             elif not ajuste or len(ajuste.strip()) < 5:
                 st.warning("📝 Describe con un poco más de detalle el ajuste que necesitas.")
             else:
