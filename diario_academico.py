@@ -129,14 +129,14 @@ def solicitar_openai_con_reintento(api_key, modelo, prompt):
     )
     return response.choices[0].message.content
 
-# --- FUNCIÓN MODULAR PARA GENERAR WORD (ESQUEMA 2026 OFICIAL) ---
-def generar_documento_diario_2026(datos, form_data):
+# --- GENERADOR DE WORD (ESTRUCTURA PDF OFICIAL) ---
+def generar_documento_oficial(datos, form):
     doc = Document()
-    doc.styles['Normal'].font.name = 'Calibri'
-    doc.styles['Normal'].font.size = Pt(10)
+    doc.styles['Normal'].font.name = 'Arial'
+    doc.styles['Normal'].font.size = Pt(9)
 
-    sections = doc.sections
-    for section in sections:
+    # Ajuste de márgenes (estrechos)
+    for section in doc.sections:
         section.left_margin = Inches(0.5)
         section.right_margin = Inches(0.5)
         section.top_margin = Inches(0.5)
@@ -146,139 +146,168 @@ def generar_documento_diario_2026(datos, form_data):
         shd = parse_xml(r'<w:shd {} w:fill="{}"/>'.format(nsdecls('w'), color))
         cell._tc.get_or_add_tcPr().append(shd)
 
-    def fijar_anchos_columna(tabla, anchos_pulgadas):
-        tabla.autofit = False
-        for row in tabla.rows:
-            for idx, ancho in enumerate(anchos_pulgadas):
-                if idx < len(row.cells):
-                    row.cells[idx].width = Inches(ancho)
+    # ENCABEZADO
+    p_header = doc.add_paragraph()
+    p_header.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_header.add_run("Ministerio de Educación de la República Dominicana\n").bold = True
+    p_header.add_run("DATOS GENERALES").bold = True
 
-    # ENCABEZADO OFICIAL (Membrete)
-    p_centro = doc.add_paragraph()
-    p_centro.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_centro = p_centro.add_run(f"{form_data['centro']}\n")
-    run_centro.bold = True
-    run_centro.font.size = Pt(12)
+    # TABLA 1: DATOS GENERALES
+    t_gen = doc.add_table(rows=5, cols=4)
+    t_gen.style = 'Table Grid'
     
-    if form_data['eslogan']:
-        run_eslogan = p_centro.add_run(f"“{form_data['eslogan']}”\n")
-        run_eslogan.italic = True
-        run_eslogan.font.size = Pt(10)
+    # Fila 0
+    t_gen.cell(0,0).text = f"Nombre completo: {form['docente']}"
+    t_gen.cell(0,0).merge(t_gen.cell(0,1))
+    t_gen.cell(0,2).text = f"Cédula: {form['cedula']}"
+    t_gen.cell(0,2).merge(t_gen.cell(0,3))
+    
+    # Fila 1
+    t_gen.cell(1,0).text = f"Regional: {form['regional']}"
+    t_gen.cell(1,1).text = f"Distrito: {form['distrito']}"
+    t_gen.cell(1,2).text = f"Centro Educativo: {form['centro']}"
+    t_gen.cell(1,2).merge(t_gen.cell(1,3))
+    
+    # Fila 2
+    t_gen.cell(2,0).text = f"Nivel/Sub-Sistema: {form['nivel']}"
+    t_gen.cell(2,1).text = f"Ciclo: {form['ciclo']}"
+    t_gen.cell(2,2).text = f"Grado y Sección: {form['grado']}"
+    t_gen.cell(2,3).text = f"Modalidad: {form['modalidad']}"
+    
+    # Fila 3
+    t_gen.cell(3,0).text = f"Área: {form['area']}"
+    t_gen.cell(3,1).text = f"Asignatura: {form['asignatura']}"
+    t_gen.cell(3,2).text = f"Semana: {form['semana']}"
+    t_gen.cell(3,3).text = f"Código: {form['codigo']}"
+    
+    # Fila 4
+    t_gen.cell(4,0).text = f"Secuencia Didáctica: {form['secuencia']}"
+    t_gen.cell(4,0).merge(t_gen.cell(4,1))
+    t_gen.cell(4,2).text = f"Duración: {form['duracion']}\nFecha: {form['fecha']}"
+    t_gen.cell(4,3).text = f"Actividad: {form['actividad']}"
+
+    # Sombrear la tabla de datos generales
+    for row in t_gen.rows:
+        for cell in row.cells:
+            shade_cell(cell, "E2E8F0")
+
+    p_plan = doc.add_paragraph()
+    p_plan.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_plan.add_run("\nPlanificación de Clase Diaria").bold = True
+
+    # TABLA 2: COMPETENCIAS
+    t_comp = doc.add_table(rows=4, cols=1)
+    t_comp.style = 'Table Grid'
+    
+    t_comp.cell(0,0).text = "Competencias específicas"
+    t_comp.cell(0,0).paragraphs[0].runs[0].bold = True
+    shade_cell(t_comp.cell(0,0), "DBEAFE")
+    t_comp.cell(1,0).text = "\n".join(datos.get("COMPETENCIAS_ESPECIFICAS", []))
+    
+    t_comp.cell(2,0).text = "Competencias Fundamentales"
+    t_comp.cell(2,0).paragraphs[0].runs[0].bold = True
+    shade_cell(t_comp.cell(2,0), "DBEAFE")
+    # Generar cuadritos para las competencias fundamentales
+    comp_fund = "  ".join([f"☑ {cf}" for cf in datos.get("COMPETENCIAS_FUNDAMENTALES", [])])
+    t_comp.cell(3,0).text = comp_fund
+
+    # TABLA 3: CONTENIDOS
+    doc.add_paragraph()
+    p_cont = doc.add_paragraph()
+    p_cont.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_cont.add_run("CONTENIDOS").bold = True
+    
+    t_cont = doc.add_table(rows=2, cols=4)
+    t_cont.style = 'Table Grid'
+    headers_cont = ["Conceptos", "Procedimientos", "Actitudes y valores", "Indicadores de Logro"]
+    for i, txt in enumerate(headers_cont):
+        t_cont.cell(0,i).text = txt
+        t_cont.cell(0,i).paragraphs[0].runs[0].bold = True
+        shade_cell(t_cont.cell(0,i), "DBEAFE")
+    
+    cont_data = datos.get("CONTENIDOS", {})
+    t_cont.cell(1,0).text = "\n".join(cont_data.get("CONCEPTOS", []))
+    t_cont.cell(1,1).text = "\n".join(cont_data.get("PROCEDIMIENTOS", []))
+    t_cont.cell(1,2).text = "\n".join(cont_data.get("ACTITUDES_VALORES", []))
+    t_cont.cell(1,3).text = "\n".join(cont_data.get("INDICADORES_LOGRO", []))
+
+    # TABLA 4: INTENCIÓN Y ESTRATEGIAS
+    doc.add_paragraph()
+    p_est = doc.add_paragraph()
+    p_est.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_est.add_run("ESTRATEGIAS DE ENSEÑANZA-APRENDIZAJE").bold = True
+
+    t_est = doc.add_table(rows=2, cols=2)
+    t_est.style = 'Table Grid'
+    t_est.cell(0,0).text = "Intención pedagógica del día"
+    t_est.cell(0,0).paragraphs[0].runs[0].bold = True
+    shade_cell(t_est.cell(0,0), "F1F5F9")
+    t_est.cell(0,1).text = form['intencion']
+    
+    t_est.cell(1,0).text = "Estrategia / metodología"
+    t_est.cell(1,0).paragraphs[0].runs[0].bold = True
+    shade_cell(t_est.cell(1,0), "F1F5F9")
+    t_est.cell(1,1).text = "\n".join(datos.get("ESTRATEGIAS", [form['estrategias']]))
+
+    # TABLA 5: MOMENTOS (INICIO, DESARROLLO, CIERRE)
+    doc.add_paragraph()
+    t_mom = doc.add_table(rows=4, cols=3)
+    t_mom.style = 'Table Grid'
+    headers_mom = ["Momento / Tiempo", "Actividades", "Recursos"]
+    for i, txt in enumerate(headers_mom):
+        t_mom.cell(0,i).text = txt
+        t_mom.cell(0,i).paragraphs[0].runs[0].bold = True
+        shade_cell(t_mom.cell(0,i), "DBEAFE")
+
+    momentos_data = datos.get("MOMENTOS", {})
+    
+    # Inicio
+    inicio = momentos_data.get("INICIO", {})
+    t_mom.cell(1,0).text = f"INICIO\nDe {inicio.get('TIEMPO', '10 minutos')}"
+    t_mom.cell(1,0).paragraphs[0].runs[0].bold = True
+    t_mom.cell(1,1).text = inicio.get("ACTIVIDADES", "")
+    t_mom.cell(1,2).text = inicio.get("RECURSOS", "")
+    
+    # Desarrollo
+    desarrollo = momentos_data.get("DESARROLLO", {})
+    t_mom.cell(2,0).text = f"DESARROLLO\nDe {desarrollo.get('TIEMPO', '35 minutos')}"
+    t_mom.cell(2,0).paragraphs[0].runs[0].bold = True
+    t_mom.cell(2,1).text = desarrollo.get("ACTIVIDADES", "")
+    t_mom.cell(2,2).text = desarrollo.get("RECURSOS", "")
+
+    # Cierre
+    cierre = momentos_data.get("CIERRE", {})
+    t_mom.cell(3,0).text = f"CIERRE\nDe {cierre.get('TIEMPO', '5 minutos')}"
+    t_mom.cell(3,0).paragraphs[0].runs[0].bold = True
+    t_mom.cell(3,1).text = cierre.get("ACTIVIDADES", "")
+    t_mom.cell(3,2).text = cierre.get("RECURSOS", "")
+
+    # TABLA 6: EVALUACIÓN Y ADAPTACIONES
+    doc.add_paragraph()
+    t_ev = doc.add_table(rows=4, cols=3)
+    t_ev.style = 'Table Grid'
+    
+    t_ev.cell(0,0).text = "Evidencias"
+    t_ev.cell(0,0).paragraphs[0].runs[0].bold = True
+    shade_cell(t_ev.cell(0,0), "DBEAFE")
+    t_ev.cell(0,1).merge(t_ev.cell(0,2))
+    t_ev.cell(0,1).text = "\n".join(datos.get("EVIDENCIAS", []))
+    
+    headers_ev = ["Tipo", "Técnicas", "Instrumentos"]
+    for i, txt in enumerate(headers_ev):
+        t_ev.cell(1,i).text = txt
+        t_ev.cell(1,i).paragraphs[0].runs[0].bold = True
+        shade_cell(t_ev.cell(1,i), "F1F5F9")
         
-    if form_data['ubicacion']:
-        p_centro.add_run(f"{form_data['ubicacion']}\n").font.size = Pt(9)
-    if form_data['telefono']:
-        p_centro.add_run(f"Teléfono: {form_data['telefono']}\n").font.size = Pt(9)
-    if form_data['email']:
-        p_centro.add_run(f"E-mail: {form_data['email']}").font.size = Pt(9)
+    t_ev.cell(2,0).text = "\n".join(datos.get("TIPO_EVALUACION", []))
+    t_ev.cell(2,1).text = "\n".join(datos.get("TECNICAS", []))
+    t_ev.cell(2,2).text = "\n".join(datos.get("INSTRUMENTOS", []))
 
-    p_titulo = doc.add_paragraph()
-    p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_tit = p_titulo.add_run("ESQUEMA DE PLANIFICACIÓN DIARIA")
-    run_tit.bold = True
-    run_tit.font.size = Pt(14)
-
-    # TABLA 1: DATOS BÁSICOS (Fecha, Área, Docente, Grado)
-    t1 = doc.add_table(rows=2, cols=4)
-    t1.style = 'Table Grid'
-    headers_t1 = ["Fecha", "Área", "Docente", "Grado y sección"]
-    valores_t1 = [form_data['fecha'], form_data['area'], form_data['docente'], form_data['grado']]
-    for i, txt in enumerate(headers_t1):
-        cell = t1.cell(0, i)
-        cell.text = txt
-        cell.paragraphs[0].runs[0].bold = True
-        shade_cell(cell, "E2E8F0")
-    for i, txt in enumerate(valores_t1):
-        t1.cell(1, i).text = txt
-    fijar_anchos_columna(t1, [1.5, 2.0, 2.0, 2.0])
-
-    doc.add_paragraph()
-
-    # TABLA 2: DETALLES PEDAGÓGICOS (Ampliada con Comp. Fundamental)
-    t2 = doc.add_table(rows=6, cols=2)
-    t2.style = 'Table Grid'
-    detalles = [
-        ("Estrategias de enseñanza - aprendizaje:", form_data['estrategias']),
-        ("Tema:", form_data['tema']),
-        ("Competencia Fundamental:", datos.get("COMPETENCIA_FUNDAMENTAL", "No especificada en la malla.")),
-        ("Competencias específicas del grado:", datos.get("COMPETENCIAS", "No especificada en la malla.")),
-        ("Intención pedagógica del día:", datos.get("INTENCION", form_data['intencion'])),
-        ("Indicador de logro:", datos.get("INDICADOR", "No especificado en la malla."))
-    ]
-    for i, (label, val) in enumerate(detalles):
-        cell_label = t2.cell(i, 0)
-        cell_label.text = label
-        cell_label.paragraphs[0].runs[0].bold = True
-        shade_cell(cell_label, "F1F5F9")
-        t2.cell(i, 1).text = val
-    fijar_anchos_columna(t2, [2.5, 5.5])
-
-    doc.add_paragraph()
-
-    # TABLA 3: MATRIZ DE MOMENTOS PEDAGÓGICOS (4 Columnas)
-    t3 = doc.add_table(rows=4, cols=4)
-    t3.style = 'Table Grid'
-    
-    headers_t3 = ["Competencias específicas del grado", "Momentos", "Actividades/duración", "Recursos"]
-    for i, txt in enumerate(headers_t3):
-        cell = t3.cell(0, i)
-        cell.text = txt
-        cell.paragraphs[0].runs[0].bold = True
-        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        shade_cell(cell, "DBEAFE")
-
-    # Fila 1: INICIO
-    t3.cell(1, 1).text = "Inicio"
-    t3.cell(1, 1).paragraphs[0].runs[0].bold = True
-    t3.cell(1, 2).text = datos.get("INICIO", {}).get("ACTIVIDADES", "")
-    t3.cell(1, 3).text = datos.get("INICIO", {}).get("RECURSOS", "")
-
-    # Fila 2: DESARROLLO (Contiene sub-elementos)
-    t3.cell(2, 1).text = "Desarrollo"
-    t3.cell(2, 1).paragraphs[0].runs[0].bold = True
-    
-    des_data = datos.get("DESARROLLO", {})
-    p_des = t3.cell(2, 2).paragraphs[0]
-    p_des.add_run("Procedimientos: ").bold = True
-    p_des.add_run(des_data.get("PROCEDIMIENTOS", "") + "\n")
-    p_des.add_run("Actividad: ").bold = True
-    p_des.add_run(des_data.get("ACTIVIDAD", "") + "\n")
-    p_des.add_run("Estrategias: ").bold = True
-    p_des.add_run(des_data.get("ESTRATEGIAS", ""))
-    
-    t3.cell(2, 3).text = des_data.get("RECURSOS", "")
-
-    # Fila 3: CIERRE (Contiene Indagación y Metacognición)
-    t3.cell(3, 1).text = "Cierre"
-    t3.cell(3, 1).paragraphs[0].runs[0].bold = True
-    
-    cie_data = datos.get("CIERRE", {})
-    p_cie = t3.cell(3, 2).paragraphs[0]
-    p_cie.add_run("Indagación Dialógica o Cuestionamiento: ").bold = True
-    p_cie.add_run(cie_data.get("INDAGACION", "") + "\n")
-    p_cie.add_run("Metacognición: ").bold = True
-    p_cie.add_run(cie_data.get("METACOGNICION", ""))
-    
-    t3.cell(3, 3).text = cie_data.get("RECURSOS", "")
-
-    # Combinar verticalmente la columna "Competencias"
-    comp_cell = t3.cell(1, 0)
-    comp_cell.merge(t3.cell(2, 0)).merge(t3.cell(3, 0))
-    comp_cell.text = datos.get("COMPETENCIAS", "Competencias específicas del grado extraídas de la malla.")
-    comp_cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-    
-    fijar_anchos_columna(t3, [1.5, 1.0, 3.5, 2.0])
-
-    doc.add_paragraph()
-
-    # TABLA 4: RECUPERACIÓN PEDAGÓGICA
-    t4 = doc.add_table(rows=1, cols=1)
-    t4.style = 'Table Grid'
-    cell_rec = t4.cell(0, 0)
-    p_rec = cell_rec.paragraphs[0]
-    p_rec.add_run("Actividades de recuperación pedagógica: ").bold = True
-    p_rec.add_run(datos.get("RECUPERACION", ""))
-    fijar_anchos_columna(t4, [8.0])
+    t_ev.cell(3,0).text = "ADAPTACIONES (Si aplica)"
+    t_ev.cell(3,0).paragraphs[0].runs[0].bold = True
+    shade_cell(t_ev.cell(3,0), "FEE2E2")
+    t_ev.cell(3,1).merge(t_ev.cell(3,2))
+    t_ev.cell(3,1).text = datos.get("ADAPTACIONES", "No aplica")
 
     buffer = BytesIO()
     doc.save(buffer)
@@ -298,112 +327,118 @@ with st.sidebar:
         st.success(f"✅ {proveedor_ia} · {modelo_seleccionado}")
 
 # --- ENCABEZADO ---
-st.markdown('<div class="main-header">Esquema de Planificación Diaria</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Ministerio de Educación de la República Dominicana (MINERD)</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Esquema de Planificación Diaria Oficial</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Formato Estructurado MINERD - Técnico Profesional</div>', unsafe_allow_html=True)
 
 # --- FORMULARIO ---
-with st.form("form_plandiario2026", clear_on_submit=False):
+with st.form("form_plandiario_oficial", clear_on_submit=False):
     
-    st.markdown('<div class="section-title">🏫 1. Datos de Identificación Institucional</div>', unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
+    st.markdown('<div class="section-title">🏫 1. Datos Generales e Institucionales</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
     with col1:
-        centro = st.text_input("Nombre del Centro Educativo", placeholder="Ej: Politécnico Salesiano Arquides Calderón")
-        ubicacion = st.text_input("Ubicación", placeholder="Ej: Moca, Provincia Espaillat")
-        telefono = st.text_input("Teléfono", placeholder="Ej: 809-823-3322")
+        docente = st.text_input("Nombre completo del Docente")
+        regional = st.text_input("Regional", value="06")
+        nivel = st.text_input("Nivel/Sub-Sistema", value="Secundario")
+        area = st.selectbox("Área", ["Matemáticas", "Lengua Española", "Ciencias Naturales", "Ciencias Sociales", "Idiomas", "Técnico Profesional"])
+        secuencia = st.text_input("Secuencia Didáctica", placeholder="Ej: La matemática en la minería")
     with col2:
-        eslogan = st.text_input("Eslogan del Centro", placeholder="Ej: Formando Honrados Ciudadanos y Buenos Cristianos")
-        email = st.text_input("E-mail", placeholder="Ej: politecnicoacmoca@gmail.com")
-        docente = st.text_input("Docente", placeholder="Nombre del docente")
-        
-    col3, col4 = st.columns(2)
+        cedula = st.text_input("Cédula")
+        distrito = st.text_input("Distrito", value="06")
+        ciclo = st.text_input("Ciclo", value="2do ciclo")
+        asignatura = st.text_input("Asignatura", placeholder="Ej: Geometría")
+        duracion = st.text_input("Duración", value="50 minutos")
     with col3:
-        area = st.selectbox("Área Curricular", [
-            "Matemática", "Lengua Española", "Ciencias Sociales", "Ciencias de la Naturaleza", 
-            "Inglés", "Francés", "Educación Física", "Educación Artística", "Formación Integral Humana y Religiosa"
-        ])
+        centro = st.text_input("Centro Educativo", placeholder="Ej: Politécnico Salesiano")
+        grado = st.text_input("Grado y Sección", placeholder="Ej: 4to B")
+        modalidad = st.text_input("Modalidad", value="Técnico Profesional")
+        semana = st.text_input("Semana / Código", placeholder="Semana X / Código Y")
+        codigo = st.text_input("Código de Asignatura")
+        
+    col4, col5 = st.columns(2)
     with col4:
-        grado = st.text_input("Grado y sección", placeholder="Ej: 5to de Bachillerato, Sección A")
-        fecha = st.date_input("Fecha de Ejecución")
+        fecha = st.date_input("Fecha")
+    with col5:
+        actividad = st.text_input("Número de Actividad", placeholder="Ej: 2da")
 
     st.markdown('<div class="section-title">📄 2. Malla Curricular Oficial (Obligatoria)</div>', unsafe_allow_html=True)
-    archivo_malla = st.file_uploader("Carga el documento de la Malla Curricular (PDF o Word)", type=["pdf", "docx"], help="La IA extraerá automáticamente las competencias e indicadores desde este documento, evitando invenciones.")
+    archivo_malla = st.file_uploader("Carga el documento de la Malla Curricular (PDF o Word)", type=["pdf", "docx"], help="La IA extraerá contenidos, competencias e indicadores desde este documento.")
 
-    st.markdown('<div class="section-title">📝 3. Datos Curriculares de la Clase</div>', unsafe_allow_html=True)
-    estrategias = st.text_input("Estrategias de enseñanza - aprendizaje", value="Recuperación de Experiencias Previas, Sociodrama o Dramatización, Expositiva de Conocimientos Elaborados y/o Acumulados, Indagación Dialógica o Cuestionamiento, Descubrimiento e Indagación")
-    tema = st.text_input("Tema de la clase", placeholder="Ej: ITBIS Ley 254-06. Origen. Base Legal.")
-    intencion = st.text_area("Intención pedagógica del día", height=70, placeholder="Ej: Comprender el origen legal del ITBIS para aplicarlo en facturas prácticas.")
-    
-    st.markdown('<div class="section-title">👥 4. Perfil Sociocognitivo</div>', unsafe_allow_html=True)
-    perfil_grupo = st.text_area("Características del grupo y NEAE (Opcional)", placeholder="Ej: Grupo kinestésico, 2 estudiantes con TDAH. Requiere ejemplos visuales.")
+    st.markdown('<div class="section-title">📝 3. Estrategia e Intención</div>', unsafe_allow_html=True)
+    estrategias = st.text_input("Estrategia / Metodología", placeholder="Ej: Indagación dialógica, Estudio de Caso")
+    tema = st.text_input("Tema a tratar", placeholder="Ej: Transformaciones geométricas")
+    intencion = st.text_area("Intención pedagógica del día", height=70, placeholder="Ej: Utilizar el plano cartesiano para ubicar puntos mediante la herramienta...")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    submit_button = st.form_submit_button("⚙️ Generar Planificación Diaria 2026")
+    submit_button = st.form_submit_button("⚙️ Generar Planificación Diaria Oficial")
 
 # --- LÓGICA CORE ---
 if submit_button:
     if not api_key_usuario:
         st.error("🔒 Debes ingresar tu API Key en la página de Inicio.")
     elif not archivo_malla:
-        st.warning("⚠️ Debes cargar la Malla Curricular para extraer las competencias e indicadores sin alucinaciones.")
+        st.warning("⚠️ Debes cargar la Malla Curricular para extraer los elementos obligatorios.")
     elif not tema or not intencion:
         st.warning("📝 Por favor, completa el Tema y la Intención Pedagógica.")
     else:
-        with st.spinner(f'🧠 Leyendo malla curricular y diseñando planificación con {modelo_seleccionado}...'):
+        with st.spinner(f'🧠 Leyendo malla curricular y diseñando matriz oficial con {modelo_seleccionado}...'):
             respuesta_ia = None
             try:
-                # 1. Extraer texto de la malla
                 texto_malla = extraer_texto_documento(archivo_malla)
                 if len(texto_malla) > 60000: texto_malla = texto_malla[:60000]
 
                 if len(texto_malla.strip()) < 50:
-                    st.error("❌ No se pudo extraer texto del archivo. Si es un PDF escaneado, intenta pasar el texto a Word.")
+                    st.error("❌ No se pudo extraer texto del archivo.")
                     st.stop()
 
-                prompt_maestro = f"""Actúa como experto en planificación educativa del MINERD (República Dominicana) para el esquema oficial 2026.
-Diseña la estructura metodológica para una clase de 50 minutos del área de {area}.
+                prompt_maestro = f"""Actúa como experto en planificación educativa del MINERD (República Dominicana).
+Diseña la estructura metodológica detallada para una clase de {duracion} del área de {area}.
 
 TEMA DE LA CLASE: {tema}
 INTENCIÓN PEDAGÓGICA: {intencion}
-PERFIL DEL GRUPO: {perfil_grupo if perfil_grupo else "Grupo estándar de secundaria"}
+ESTRATEGIAS BASE: {estrategias}
 
-MALLA CURRICULAR OFICIAL (DOCUMENTO FUENTE):
+MALLA CURRICULAR OFICIAL (FUENTE ESTRICTA):
 {texto_malla}
 
-REGLA CRÍTICA DE EXTRACCIÓN (CERO ALUCINACIONES):
-1. Busca en la MALLA CURRICULAR la Competencia Fundamental, la Competencia Específica del grado y el Indicador de Logro que mejor se adapten al TEMA de la clase.
-2. Transcríbelos TEXTUALMENTE en el JSON. NO inventes competencias ni indicadores que no estén en el documento.
-3. Si el documento no contiene algún elemento, escribe "No encontrado en la malla" en ese campo.
+INSTRUCCIONES DE EXTRACCIÓN Y REDACCIÓN:
+1. Extrae textualmente de la Malla las Competencias Específicas, Competencias Fundamentales, Conceptos, Procedimientos, Actitudes/Valores e Indicadores de Logro que correspondan al tema.
+2. Diseña los Momentos de la clase (INICIO, DESARROLLO, CIERRE) redactando las 'Actividades' paso a paso (saludo, pase de lista, recuperación de saberes, desarrollo guiado, metacognición, etc.) y lista los 'Recursos' a utilizar.
+3. Para la Evaluación, sugiere Evidencias, Tipos (Diagnóstica, Formativa), Técnicas e Instrumentos.
 
-REGLAS DE PLANIFICACIÓN:
-1. Para el INICIO (8 min), detalla actividades y recursos.
-2. Para el DESARROLLO (32 min), separa claramente en campos distintos: Procedimientos, Actividad y Estrategias, junto con recursos.
-3. Para el CIERRE (10 min), redacta una Indagación Dialógica/Cuestionamiento y una actividad de Metacognición, con recursos.
-4. Redacta Actividades de recuperación pedagógica para estudiantes que necesiten apoyo.
-5. FORMATO: Devuelve ÚNICAMENTE un JSON válido en texto plano (sin markdown). 
-6. Si necesitas salto de línea en un texto, usa la etiqueta: {MARKER_NL}
-
-FORMATO DE SALIDA ESTRICTO (JSON NATIVO):
+FORMATO DE SALIDA ESTRICTO (JSON NATIVO SIN MARKDOWN):
 {{
-  "COMPETENCIA_FUNDAMENTAL": "[Extraída textualmente de la malla]",
-  "COMPETENCIAS": "[Competencias específicas extraídas textualmente]",
-  "INDICADOR": "[Indicador de logro extraído textualmente]",
-  "INTENCION": "{intencion}",
-  "INICIO": {{
-    "ACTIVIDADES": "[Actividades de inicio con duración (8 min)]",
-    "RECURSOS": "[Recursos para el inicio]"
+  "COMPETENCIAS_ESPECIFICAS": ["Código - Descripción de competencia 1", "Código - Descripción 2"],
+  "COMPETENCIAS_FUNDAMENTALES": ["Ética y Ciudadana", "Resolución de Problemas", "Científica y Tecnológica"],
+  "CONTENIDOS": {{
+    "CONCEPTOS": ["Concepto 1", "Concepto 2"],
+    "PROCEDIMIENTOS": ["Procedimiento 1", "Procedimiento 2"],
+    "ACTITUDES_VALORES": ["Actitud 1", "Valor 1"],
+    "INDICADORES_LOGRO": ["IL-1 - Descripción"]
   }},
-  "DESARROLLO": {{
-    "PROCEDIMIENTOS": "[Pasos a seguir por el docente (10 min)]",
-    "ACTIVIDAD": "[Actividad principal del estudiante (15 min)]",
-    "ESTRATEGIAS": "[Estrategias aplicadas (7 min)]",
-    "RECURSOS": "[Recursos para el desarrollo]"
+  "ESTRATEGIAS": ["{estrategias}"],
+  "MOMENTOS": {{
+    "INICIO": {{
+      "TIEMPO": "8 minutos",
+      "ACTIVIDADES": "Actividades de inicio paso a paso...",
+      "RECURSOS": "Pizarra, proyector..."
+    }},
+    "DESARROLLO": {{
+      "TIEMPO": "35 minutos",
+      "ACTIVIDADES": "Actividades de desarrollo (trabajo grupal, explicación, etc)...",
+      "RECURSOS": "Cuadernos, GeoGebra..."
+    }},
+    "CIERRE": {{
+      "TIEMPO": "7 minutos",
+      "ACTIVIDADES": "Preguntas de metacognición...",
+      "RECURSOS": "Juego interactivo, cuaderno..."
+    }}
   }},
-  "CIERRE": {{
-    "INDAGACION": "[Preguntas o cuestionamiento (5 min)]",
-    "METACOGNICION": "[Actividad de reflexión (5 min)]",
-    "RECURSOS": "[Recursos para el cierre]"
-  }},
-  "RECUPERACION": "[Actividades de recuperación pedagógica]"
+  "EVIDENCIAS": ["Cuadernos", "Gráficos en plataforma"],
+  "TIPO_EVALUACION": ["Formativa (Desarrollo y Cierre)", "Heteroevaluación"],
+  "TECNICAS": ["Observación directa", "Análisis de procedimientos"],
+  "INSTRUMENTOS": ["Lista de cotejo"],
+  "ADAPTACIONES": "No aplica"
 }}
 """
                 if proveedor_ia == "Google Gemini":
@@ -414,21 +449,24 @@ FORMATO DE SALIDA ESTRICTO (JSON NATIVO):
                 datos = parsear_json_robusto(respuesta_ia)
                 datos = decodificar_marcadores(datos)
 
+                # Agrupar los datos del formulario
                 datos_formulario = {
-                    "centro": centro, "eslogan": eslogan, "ubicacion": ubicacion, 
-                    "telefono": telefono, "email": email, "fecha": fecha.strftime('%d/%m/%Y'),
-                    "area": area, "docente": docente, "grado": grado, 
-                    "estrategias": estrategias, "tema": tema, "intencion": intencion
+                    "docente": docente, "cedula": cedula, "regional": regional, "distrito": distrito,
+                    "centro": centro, "nivel": nivel, "ciclo": ciclo, "grado": grado, 
+                    "modalidad": modalidad, "area": area, "asignatura": asignatura, 
+                    "semana": semana, "codigo": codigo, "secuencia": secuencia, 
+                    "duracion": duracion, "fecha": fecha.strftime('%d/%m/%Y'), 
+                    "actividad": actividad, "intencion": intencion, "estrategias": estrategias
                 }
 
-                buffer_docx = generar_documento_diario_2026(datos, datos_formulario)
+                buffer_docx = generar_documento_oficial(datos, datos_formulario)
                 
-                st.success("✅ ¡Planificación Diaria 2026 generada con extracción automática de malla!")
+                st.success("✅ ¡Planificación Diaria Oficial generada con éxito!")
                 
                 st.download_button(
-                    label="📥 Descargar Planificación Diaria 2026 (.docx)",
+                    label="📥 Descargar Planificación Oficial MINERD (.docx)",
                     data=buffer_docx,
-                    file_name=f"Plan_Diario_2026_{area}_{fecha.strftime('%Y%m%d')}.docx",
+                    file_name=f"Plan_Diario_Oficial_{area}_{fecha.strftime('%Y%m%d')}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     type="primary" 
                 )
